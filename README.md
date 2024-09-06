@@ -32,6 +32,7 @@ Given those parameters you could expect the script to draw 10 tickets a second f
 - [ ] Brute-force mode: add option to restart the brute force process
 - [ ] Brute-force mode: switch interval into option selector with predefined options
 - [ ] Brute-force mode: interval selector, add option to change interval during brute force process?
+- [ ] Brute-force mode: add notification when winning if technically possible
 
 ### Guaranteed odds mode
 

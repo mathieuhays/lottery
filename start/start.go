@@ -80,7 +80,7 @@ func New() Model {
 
 	// interval
 	inputs[interval] = textinput.New()
-	inputs[interval].Placeholder = "1000"
+	inputs[interval].Placeholder = "100"
 	inputs[interval].Prompt = ""
 	inputs[interval].Validate = intervalValidator
 
@@ -138,35 +138,26 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) View() string {
-	errMessage := ""
+func (m Model) View(width, height int) string {
+	ui := lipgloss.NewStyle().Width(50).Render(lipgloss.JoinVertical(
+		lipgloss.Left,
+		lipgloss.JoinHorizontal(lipgloss.Top,
+			inputStyle.Width(30).Render("Chances"),
+			m.inputs[chances].View()),
+		lipgloss.JoinHorizontal(lipgloss.Top,
+			inputStyle.Width(30).Render("Interval"),
+			m.inputs[interval].View()),
+		lipgloss.JoinHorizontal(lipgloss.Top,
+			inputStyle.Width(30).Render("Cost"),
+			m.inputs[cost].View()),
+	))
 
-	if m.err != nil {
-		errMessage = "\n\n" + m.err.Error() + "\n\n"
-	}
-
-	return fmt.Sprintf(`%s
-
-%s
-%s
-
-%s
-%s
-
-%s
-%s
-
-%s
-`,
-		errMessage,
-		inputStyle.Width(30).Render("Chances"),
-		m.inputs[chances].View(),
-		inputStyle.Width(30).Render("Interval"),
-		m.inputs[interval].View(),
-		inputStyle.Width(30).Render("Cost"),
-		m.inputs[cost].View(),
-		continueStyle.Render("Continue ->"),
-	) + "\n"
+	return lipgloss.Place(width, height,
+		lipgloss.Center, lipgloss.Center,
+		dialogBoxStyle.Render(ui),
+		lipgloss.WithWhitespaceChars("$€£¥"),
+		lipgloss.WithWhitespaceForeground(subtle),
+	)
 }
 
 func nextInput(m Model) int {

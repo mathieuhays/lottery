@@ -15,3 +15,6 @@ go.work.sum
 
 # env file
 .env
+
+# experiments
+examples

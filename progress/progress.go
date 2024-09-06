@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const progressBufferSize = 10
+const progressBufferSize = 100
 
 const (
 	hotPink  = lipgloss.Color("#FF06B7")
@@ -28,7 +28,7 @@ var (
 	winningStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Blink(true)
 
 	bufferStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, true).MarginLeft(2).PaddingLeft(2)
+			Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(darkGray).PaddingLeft(1)
 )
 
 type Model struct {
@@ -44,12 +44,12 @@ type Model struct {
 	running       bool
 }
 
-type tickMsg struct {
+type TickMsg struct {
 	ticket int
 	number int
 }
 
-type startMsg struct {
+type StartMsg struct {
 	chances  int
 	interval time.Duration
 	cost     float64
@@ -68,7 +68,7 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Start(chances int, interval time.Duration, cost float64) tea.Cmd {
 	return func() tea.Msg {
-		return startMsg{
+		return StartMsg{
 			chances:  chances,
 			interval: interval,
 			cost:     cost,
@@ -78,7 +78,7 @@ func (m Model) Start(chances int, interval time.Duration, cost float64) tea.Cmd 
 
 func (m Model) tick() tea.Cmd {
 	return tea.Tick(m.interval, func(_ time.Time) tea.Msg {
-		return tickMsg{
+		return TickMsg{
 			ticket: m.ticketCount + 1,
 			number: rand.Intn(m.chances),
 		}
@@ -87,7 +87,7 @@ func (m Model) tick() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case startMsg:
+	case StartMsg:
 		m.chances = msg.chances
 		m.interval = msg.interval
 		m.cost = msg.cost
@@ -96,7 +96,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.start = time.Now()
 
 		return m, m.tick()
-	case tickMsg:
+	case TickMsg:
 		winning := ""
 		if msg.number == m.winningNumber {
 			winning = winningStyle.Render(" >>>> Winning!")
@@ -160,7 +160,21 @@ func timeToCoverOdds(chances int, interval time.Duration) time.Duration {
 	return dur.Round(time.Second)
 }
 
-func (m Model) View() string {
+func rowRenderer(width int) func(label, value string) string {
+	rowStyle := lipgloss.NewStyle().Width(width).PaddingRight(1).MarginBottom(1).Align(lipgloss.Left)
+
+	return func(label, value string) string {
+		return rowStyle.Render(
+			lipgloss.JoinVertical(lipgloss.Left, labelStyle.Render(label+":"), valueStyle.Render(value)),
+		)
+	}
+}
+
+func (m Model) View(width, height int) string {
+	if height < 0 {
+		return "" // window size not yet set
+	}
+
 	var dur time.Duration
 
 	if m.end != nil {
@@ -169,20 +183,27 @@ func (m Model) View() string {
 		dur = time.Since(m.start)
 	}
 
-	info := []string{
-		labelStyle.Render("Chances: ") + valueStyle.Render(fmt.Sprintf("1/%v", m.chances)),
-		labelStyle.Render("Interval: ") + valueStyle.Render(fmt.Sprintf("%s", m.interval)),
-		labelStyle.Render("Cost: ") + valueStyle.Render(fmt.Sprintf("%v", m.cost)),
-		labelStyle.Render("Time to match odds: ") + valueStyle.Render(fmt.Sprintf("%s", timeToCoverOdds(m.chances, m.interval))),
-		labelStyle.Render("Cost to match odds: ") + valueStyle.Render(prettyCost(m.cost*float64(m.chances))),
-		"--------------------",
-		labelStyle.Render("Execution time: ") + valueStyle.Render(fmt.Sprintf("%s", dur.Round(time.Second))),
-		labelStyle.Render("Total cost: ") + valueStyle.Render(fmt.Sprintf("%v", prettyCost(m.cost*float64(m.ticketCount)))),
+	bufOffset := progressBufferSize - height
+	if bufOffset < 0 {
+		bufOffset = 0
 	}
 
-	return "\n" + lipgloss.JoinHorizontal(
-		lipgloss.Left,
+	infoWidth := width / 3
+	row := rowRenderer(infoWidth)
+
+	info := []string{
+		row("Chances", fmt.Sprintf("1/%v", m.chances)),
+		row("Interval", fmt.Sprintf("%s", m.interval)),
+		row("Cost", fmt.Sprintf("%v", m.cost)),
+		row("ETA", fmt.Sprintf("%s", timeToCoverOdds(m.chances, m.interval))),
+		row("Estimated Cost", prettyCost(m.cost*float64(m.chances))),
+		row("Execution Time", fmt.Sprintf("%s", dur.Round(time.Second))),
+		row("Total Cost", fmt.Sprintf("%v", prettyCost(m.cost*float64(m.ticketCount)))),
+	}
+
+	return lipgloss.JoinHorizontal(
+		lipgloss.Bottom,
 		lipgloss.JoinVertical(lipgloss.Left, info...),
-		bufferStyle.Render(lipgloss.JoinVertical(lipgloss.Left, m.buffer...)),
+		bufferStyle.Width(width-infoWidth).Render(lipgloss.JoinVertical(lipgloss.Left, m.buffer[bufOffset:]...)),
 	)
 }

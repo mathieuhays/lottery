@@ -1,53 +1,73 @@
 package main
 
 import (
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mathieuhays/lottery/header"
 	"github.com/mathieuhays/lottery/progress"
 	"github.com/mathieuhays/lottery/start"
 	"log"
 	"time"
 )
 
-const (
-	ViewStart = iota
-	ViewProgress
-)
-
-const (
-	hotPink  = lipgloss.Color("#FF06B7")
-	darkGray = lipgloss.Color("#767676")
-)
-
-var headerStyle = lipgloss.NewStyle().Foreground(hotPink)
-
 type model struct {
-	view     int
+	width  int
+	height int
+
+	keys     defaultKeyMap
+	header   header.Model
+	help     help.Model
 	start    start.Model
 	progress progress.Model
+	quitting bool
+
+	debug          string
+	isProgressView bool
 }
 
 func initialModel() model {
-	return model{
-		view:     ViewStart,
+	m := model{
+		keys:     defaultKeys,
+		header:   header.New("Lottery Odd Visualizer"),
+		help:     help.New(),
 		start:    start.New(),
 		progress: progress.New(),
 	}
+
+	m.keys.ExtraBaseKeys = start.ViewKeys()
+
+	return m
 }
 
 func (m model) Init() tea.Cmd {
-	return m.start.Init()
+	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
+func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	var mainCmd, startCmd, progressCmd tea.Cmd
+
+	switch msg := message.(type) {
 	case tea.KeyMsg:
-		if key.Matches(msg, key.NewBinding(key.WithKeys("q", "ctrl+c"))) {
-			return m, tea.Quit
+		switch {
+		case key.Matches(msg, m.keys.Start):
+			mainCmd = m.progress.Start(2000, time.Millisecond*100, 1)
+			m.debug = "start triggered"
+		case key.Matches(msg, m.keys.Help):
+			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, m.keys.Quit):
+			m.quitting = true
+			mainCmd = tea.Quit
 		}
+
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		m.width = msg.Width
+
 	case start.ViewChangeMsg:
-		m.view = ViewProgress
+		m.isProgressView = true
+		m.keys.ExtraBaseKeys = progress.ViewKeys()
 		chances := msg.Chances
 		interval := time.Duration(msg.Interval) * time.Millisecond
 		cost := msg.Cost
@@ -55,34 +75,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.progress.Start(chances, interval, cost)
 	}
 
-	var cmd tea.Cmd
-
-	switch m.view {
-	case ViewStart:
-		m.start, cmd = m.start.Update(msg)
-	case ViewProgress:
-		m.progress, cmd = m.progress.Update(msg)
+	if m.isProgressView {
+		m.progress, progressCmd = m.progress.Update(message)
+	} else {
+		m.start, startCmd = m.start.Update(message)
 	}
 
-	return m, cmd
+	return m, tea.Batch(mainCmd, startCmd, progressCmd)
 }
 
 func (m model) View() string {
-	var view string
-	header := headerStyle.Width(100).PaddingTop(1).Render("Lottery Simulator")
-
-	switch m.view {
-	case ViewStart:
-		view = m.start.View()
-	case ViewProgress:
-		view = m.progress.View()
+	if m.height == 0 {
+		return "Loading..."
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, view)
+	var content string
+	helpStyle := lipgloss.NewStyle().
+		Width(m.width).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}).
+		PaddingTop(1)
+
+	headerView := m.header.View(m.width)
+	helpView := helpStyle.Render(m.help.View(m.keys))
+	contentHeight := m.height - lipgloss.Height(headerView) - lipgloss.Height(helpView)
+
+	if m.isProgressView {
+		content = m.progress.View(m.width, contentHeight)
+	} else {
+		content = m.start.View(m.width, contentHeight)
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerView,
+		content,
+		helpView,
+	)
 }
 
 func main() {
-	if _, err := tea.NewProgram(initialModel()).Run(); err != nil {
-		log.Fatalf("error starting program: %s", err)
+	if _, err := tea.NewProgram(initialModel(), tea.WithAltScreen()).Run(); err != nil {
+		log.Fatal(err)
 	}
 }
