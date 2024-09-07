@@ -32,3 +32,4 @@ Given those parameters you could expect the script to draw 10 tickets a second f
 - [ ] switch interval into option selector with predefined options
 - [ ] interval selector, add option to change interval during brute force process?
 - [ ] add notification when winning if technically possible
+- [ ] Add an advanced mode where multiple prizes can be set with different odds
